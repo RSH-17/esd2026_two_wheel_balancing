@@ -1,26 +1,27 @@
-# Handoff: MPU-6050 raw data 읽기 완료 — 다음은 물리단위 변환(θ, °/s)과 CSV 로깅
+# Handoff: MPU-6050 raw data 읽기 완료, GND 정정 및 미결 3 건 결정 — 다음은 물리단위 변환(θ, °/s)과 CSV 로깅
 
-**Last session close**: 2026-11-24 10:06 (종료 커밋은 이 파일과 함께 생성됨)
+**Last session close**: 2026-11-24 10:17 (종료 커밋은 이 파일과 함께 생성됨)
 **상태**: ready
 
 ## 세션 시작의 순서
-1. `git pull` → `git log --oneline 9364694..HEAD` 로 지난 세션 이후 커밋을 **전부** 확인 (노트북 · Pi 양쪽 커밋 포함)
+1. `git pull` → `git log --oneline 273cc08..HEAD` 로 지난 세션 이후 커밋을 **전부** 확인 (노트북 · Pi 양쪽 커밋 포함)
 2. 이 파일 정독 → 「다음 작업 시퀀스」를 계획으로 보고 → 학생 승인 후 착수
 3. 첫 턴에서 `date +"%Y-%m-%d %H:%M"` 을 읽어 세션 시작 시각을 남김
-   (**3 연속 세션**에서 이 단계가 누락됨 — §1-1 강화 여부를 이번엔 꼭 결정할 것)
+   (**4 연속 세션**에서 이 단계가 누락됨 — §1-1 강화를 다음 세션엔 꼭 결정할 것)
 
 ## 다음 작업 시퀀스 (단일)
 1. `src/sensing/imu_calib.py` 작성: `src/sensing/mpu6050_raw.py` 의 raw 값을 물리단위로 변환
    (가속도 ±2g → LSB/16384, 각속도 ±250°/s → LSB/131, 온도 raw/340+36.53), 자이로 bias 는 정지 상태
    n 샘플 평균으로 추정해 보정값 파일로 커밋, 장착 오프셋 θ₀ 측정 방법 포함
-2. CSV 파일 로깅 추가 (로그 필드는 §8-B 최소 집합: `t, tick, theta_deg, gyro_dps, wheel_l, wheel_r, u_l, u_r, vbat, i2c_err`,
+2. CSV 파일 로깅 추가 — 제어 루프는 **200Hz 목표**로 구현하고 평균·최대 Δt 를 실측해 로그에 남김
+   (로그 필드는 §8-B 최소 집합: `t, tick, theta_deg, gyro_dps, wheel_l, wheel_r, u_l, u_r, vbat, i2c_err`,
    아직 모터·엔코더가 없으니 해당 칸은 빈 값으로 두고 어떤 칸이 비었는지 로그에 명시) →
-   `python3 tools/check_log.py <로그> --rate <Hz>` 통과 확인
+   `python3 tools/check_log.py <로그> --rate <Hz>` 통과 확인. 터미널 디버그 출력(10Hz)은 그대로 둠
 3. 미결 2 건 (아래) 을 학생이 결정하고 필요하면 §9 에 기록
 
 ## 핵심 진입점
-- `AGENTS.md` §5-5 (변환은 한 곳에) · §8-B (이륜 로봇 주제별 규칙)
-- `docs/meeting-notes/2026-11-24-0946-imu-raw-read.md` — 직전 회의록
+- `AGENTS.md` §5-5 (변환은 한 곳에) · §8-B (이륜 로봇 주제별 규칙) · §9 r2 (trailer · Pi 3 B+ 결정)
+- `docs/meeting-notes/2026-11-24-1006-decisions-and-correction.md` — 직전 회의록
 - `src/sensing/mpu6050_raw.py` — raw 읽기 (WHO_AM_I 확인, ACC/GYRO 레이블 출력)
 - `tools/check_log.py` — 로그 무결성 검사 (§4-5)
 
@@ -37,11 +38,12 @@
   실측해 로그에 남길 것 — Linux 에서 지터가 있을 수 있으므로 가정하지 않고 확인함)
 
 ## 미결 (결정할 사람)
-- §1-1 세션 시작 시각 실측 단계 강화 여부 — 학생 (**3 연속 재발**, 이번엔 결정 권고)
+- §1-1 세션 시작 시각 실측 단계 강화 여부 — 학생 (**4 연속 재발**, 다음 세션엔 결정 권고)
 - 아두이노 연결 여부·방식 — 학생. 에이전트 권고: `pyserial`
 
 ## 환경 유의
 - Pi 접속 정보는 `.env` 에만 둠, 커밋하지 않음
 - `sudo` 가 필요한 명령(패키지 설치 등)은 비대화형 Bash 에서 비밀번호 입력이 불가함 — 학생이 자신의 터미널에서
   직접 실행함 (§3-4)
-- 로컬이 origin 보다 2 커밋 앞섬 (`af7f54e`, `cd9b8e0`) — 세션 종료 커밋과 함께 push 할 것
+- `.handoff.md.swp` 가 작업 디렉터리에 untracked 로 있었음 (에이전트가 만든 게 아님) — 다른 편집기로
+  이 파일을 열어둔 게 있다면 확인할 것
