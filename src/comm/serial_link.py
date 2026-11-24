@@ -131,7 +131,7 @@ class AckEvent:
 class SerialLink:
     def __init__(self, port: str | None = None, baud: int = BAUD,
                  ready_timeout_s: float = READY_TIMEOUT_S,
-                 ack_timeout_s: float = ACK_TIMEOUT_S):
+                 ack_timeout_s: float = ACK_TIMEOUT_S, diag: bool = False):
         self.port = port or find_port()
         self.baud = baud
         self.ack_timeout_ns = int(ack_timeout_s * 1e9)
@@ -139,6 +139,13 @@ class SerialLink:
         self._seq = 0
         self._pending: dict[int, int] = {}  # seq -> send time [ns, monotonic]
         self.last_write_ns = 0               # time the last write() call took
+        # TEMP diagnostics (AGENTS.md 5-3) for the scout-on write() stalls of 2026-11-25 04:09;
+        # remove in a separate commit once the cause is fixed.
+        self.diag = diag
+        self.last_write_t0_ns = 0            # monotonic_ns just before write()
+        self.last_write_cpu_ns = 0           # this thread's CPU time spent inside write()
+        self.last_outq_before = -1           # bytes in the OS output queue before / after write()
+        self.last_outq_after = -1
         self._rx = bytearray()
         self._ser = serial.Serial(self.port, self.baud, timeout=0)
         self._wait_ready(ready_timeout_s)
@@ -181,10 +188,17 @@ class SerialLink:
             del self._pending[seq]
             self.stats.lost += 1
         line = encode_cmd(seq, duty_to_permille(u_l), duty_to_permille(u_r), corrupt)
+        if self.diag:
+            self.last_outq_before = self._ser.out_waiting
+            c0 = time.thread_time_ns()
         t_send = time.monotonic_ns()  # before write(): RTT includes time spent in write()
         self._pending[seq] = t_send
         self._ser.write(line)
         self.last_write_ns = time.monotonic_ns() - t_send
+        self.last_write_t0_ns = t_send
+        if self.diag:
+            self.last_write_cpu_ns = time.thread_time_ns() - c0
+            self.last_outq_after = self._ser.out_waiting
         self.stats.tx += 1
         return seq
 

@@ -56,7 +56,10 @@ ROW_FIELDS = [
     "lost", "bad_ack", "unknown_seq", "remote_crc_err", "remote_fmt_err", "remote_wd_trip",
     # bench
     "paused", "q_depth",
+    # TEMP diagnostics (--diag, AGENTS.md 5-3); empty without --diag
+    "t_mono_ns", "cpu_us", "write_t0_ns", "write_cpu_us", "outq_before", "outq_after",
 ]
+EVENT_FIELDS = ["kind", "t_start_ns", "t_end_ns", "value"]
 ACK_FIELDS = ["seq", "send_tick", "seen_tick", "rtt_ms", "phase"]
 
 
@@ -83,6 +86,7 @@ class LogThread(threading.Thread):
         self.path = path
         self.fields = fields
         self.rows_written = 0
+        self.events: list[tuple] = []  # ("log_flush", t0, t1, rows)
 
     def run(self):
         with open(self.path, "w", newline="") as f:
@@ -95,7 +99,9 @@ class LogThread(threading.Thread):
                 w.writerow(row)
                 self.rows_written += 1
                 if self.rows_written % 200 == 0:
+                    t0 = time.monotonic_ns()
                     f.flush()
+                    self.events.append(("log_flush", t0, time.monotonic_ns(), self.rows_written))
 
     def stop(self):
         self.q.put(None)
@@ -110,6 +116,7 @@ class RosThread(threading.Thread):
         self.status = status
         self.rate_hz = rate_hz
         self.published = 0
+        self.events: list[tuple] = []  # ("ros_cb", t0, t1, n)
         self.ready = threading.Event()
         self.error: str | None = None
         self.rclpy_info = ""
@@ -128,11 +135,13 @@ class RosThread(threading.Thread):
             pub = node.create_publisher(Float64MultiArray, "loop_bench/status", 10)
 
             def on_timer():
+                t0 = time.monotonic_ns()
                 s = self.status
                 pub.publish(Float64MultiArray(data=[float(s.get("tick", 0)),
                                                     float(s.get("dt_ms", 0.0)),
                                                     float(s.get("rtt_ms_max", 0.0))]))
                 self.published += 1
+                self.events.append(("ros_cb", t0, time.monotonic_ns(), self.published))
 
             node.create_timer(1.0 / self.rate_hz, on_timer)
             self.rclpy_info = f"rmw={rclpy.get_rmw_implementation_identifier()}"
@@ -152,6 +161,30 @@ class RosThread(threading.Thread):
         if self._executor is not None:
             self._executor.shutdown()
         self.join(timeout=5)
+
+
+class SamplerThread(threading.Thread):
+    """TEMP diagnostics: 10 Hz samples of cpu0 frequency and 1-min load average."""
+
+    def __init__(self, rate_hz: float = 10.0):
+        super().__init__(name="sampler", daemon=True)
+        self.period = 1.0 / rate_hz
+        self.events: list[tuple] = []
+        self.stop_ev = threading.Event()
+
+    def run(self):
+        while not self.stop_ev.is_set():
+            t0 = time.monotonic_ns()
+            freq = read_text("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
+            load = (read_text("/proc/loadavg") or "").split(" ")[0]
+            t1 = time.monotonic_ns()
+            self.events.append(("cpu0_khz", t0, t1, freq))
+            self.events.append(("loadavg1", t0, t1, load))
+            self.stop_ev.wait(self.period)
+
+    def stop(self):
+        self.stop_ev.set()
+        self.join()
 
 
 class ControlThread(threading.Thread):
@@ -190,6 +223,7 @@ class ControlThread(threading.Thread):
                 paused = 1
                 t_next = time.monotonic_ns()  # restart the schedule after the pause
             t_start = time.monotonic_ns()
+            c_start = time.thread_time_ns()
             dt_ms = "" if t_prev is None else (t_start - t_prev) / 1e6
             t_prev = t_start
 
@@ -233,6 +267,12 @@ class ControlThread(threading.Thread):
                 r.crc_err if r else "", r.fmt_err if r else "", r.wd_trip if r else "",
                 paused, self.log.q.qsize(),
             ]
+            if a.diag:
+                L = self.link
+                row += [t_start, f"{(time.thread_time_ns() - c_start) / 1e3:.1f}", L.last_write_t0_ns,
+                        f"{L.last_write_cpu_ns / 1e3:.1f}", L.last_outq_before, L.last_outq_after]
+            else:
+                row += ["", "", "", "", "", ""]
             self.log.q.put(row)
             if dt_ms != "":
                 self.dts_ms.append(dt_ms)
@@ -271,6 +311,8 @@ def main() -> int:
     p.add_argument("--inject-crc-at", type=float, default=None, help="seconds")
     p.add_argument("--pause-at", type=float, default=None, help="seconds")
     p.add_argument("--pause-ms", type=float, default=100.0)
+    p.add_argument("--diag", action="store_true",
+                   help="TEMP: per-tick CPU/write/outq columns, ROS/log/sampler event CSV")
     a = p.parse_args()
 
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
@@ -300,7 +342,10 @@ def main() -> int:
         mpu.wake_up(bus_obj)
         imu = (bus_obj, mpu.read_raw)
 
-    link = sl.SerialLink(a.port)
+    link = sl.SerialLink(a.port, diag=a.diag)
+    sampler = SamplerThread() if a.diag else None
+    if sampler is not None:
+        sampler.start()
     log = LogThread(a.out + ".csv", ROW_FIELDS)
     ack_log = LogThread(a.out + "-acks.csv", ACK_FIELDS)
     log.start()
@@ -317,6 +362,14 @@ def main() -> int:
         ros.stop()
     if bus_obj is not None:
         bus_obj.close()
+    if sampler is not None:
+        sampler.stop()
+    if a.diag:
+        evs = log.events + (ros.events if ros else []) + sampler.events
+        with open(a.out + "-events.csv", "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(EVENT_FIELDS)
+            w.writerows(sorted(evs, key=lambda e: e[1]))
 
     s = link.stats
     dts = ctrl.dts_ms
@@ -338,6 +391,7 @@ def main() -> int:
         "ack_lag_ticks": dict(sorted(lag_counts.items(), key=lambda kv: int(kv[0]))),
         "i2c_err": ctrl.i2c_err, "injected_crc": ctrl.injected, "pauses": ctrl.paused,
         "ros_published": ros.published if ros else None,
+        "diag": a.diag,
     }
     meta = {
         "started": started, "args": vars(a), "argv": sys.argv,
