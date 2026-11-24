@@ -138,6 +138,7 @@ class SerialLink:
         self.stats = LinkStats()
         self._seq = 0
         self._pending: dict[int, int] = {}  # seq -> send time [ns, monotonic]
+        self.last_write_ns = 0               # time the last write() call took
         self._rx = bytearray()
         self._ser = serial.Serial(self.port, self.baud, timeout=0)
         self._wait_ready(ready_timeout_s)
@@ -179,13 +180,25 @@ class SerialLink:
         if seq in self._pending:  # wrapped onto an unanswered seq
             del self._pending[seq]
             self.stats.lost += 1
-        self._ser.write(encode_cmd(seq, duty_to_permille(u_l), duty_to_permille(u_r), corrupt))
-        self._pending[seq] = time.monotonic_ns()
+        line = encode_cmd(seq, duty_to_permille(u_l), duty_to_permille(u_r), corrupt)
+        t_send = time.monotonic_ns()  # before write(): RTT includes time spent in write()
+        self._pending[seq] = t_send
+        self._ser.write(line)
+        self.last_write_ns = time.monotonic_ns() - t_send
         self.stats.tx += 1
         return seq
 
+    @property
+    def pending(self) -> int:
+        """Number of commands still waiting for an ack."""
+        return len(self._pending)
+
     def poll(self) -> list[AckEvent]:
-        """Collect arrived acks, match them to send times, expire old pending seqs."""
+        """Collect arrived acks, match them to send times, expire old pending seqs.
+
+        rtt_s is measured to the start of this call, so it is only an RTT if
+        poll() is called often; a caller that stops polling inflates it.
+        """
         now = time.monotonic_ns()
         events = []
         for line in self._read_lines():
@@ -234,7 +247,7 @@ def _main() -> None:
     print(f"port={link.port} baud={link.baud} mode={a.mode} rate={a.rate} ready={link.stats.ready}")
     period_ns = int(1e9 / a.rate)
     events: list[tuple[int, str, AckEvent]] = []   # (iter, phase, event)
-    iters: list[tuple[int, int, int, int, int]] = []  # iter, t_start, t_sent, t_polled, n_ev
+    iters: list[tuple[int, int, int, int, int, int]] = []  # iter, t_start, t_sent, t_polled, n_ev, write_ns
     t_next = time.monotonic_ns()
     for i in range(a.count):
         t0 = time.monotonic_ns()
@@ -247,11 +260,14 @@ def _main() -> None:
                 got += link.poll()
         t2 = time.monotonic_ns()
         events += [(i, "loop", e) for e in got]
-        iters.append((i, t0, t1, t2, len(got)))
+        iters.append((i, t0, t1, t2, len(got), link.last_write_ns))
         t_next += period_ns
         time.sleep(max(0, t_next - time.monotonic_ns()) / 1e9)
-    time.sleep(ACK_TIMEOUT_S * 2)
-    events += [(a.count, "drain", e) for e in link.poll()]
+    # Drain: keep polling (do not sleep through the acks), so a late ack is
+    # timed on arrival and anything older than ack_timeout is counted as lost.
+    drain_deadline = time.monotonic_ns() + 2 * link.ack_timeout_ns
+    while link.pending and time.monotonic_ns() < drain_deadline:
+        events += [(a.count, "drain", e) for e in link.poll()]
     link.close()
 
     s = link.stats
@@ -276,7 +292,7 @@ def _main() -> None:
     dts = [(b[1] - a_[1]) / 1e6 for a_, b in zip(iters, iters[1:])]
     if dts:
         print(f"loop_dt_ms mean={statistics.mean(dts):.3f} max={max(dts):.3f} min={min(dts):.3f}")
-        wr = [(it[2] - it[1]) / 1e6 for it in iters]
+        wr = [it[5] / 1e6 for it in iters]
         print(f"write_ms mean={statistics.mean(wr):.3f} max={max(wr):.3f}")
 
     if a.trace:
@@ -290,7 +306,7 @@ def _main() -> None:
                             e.ack.crc_err, e.ack.fmt_err, e.ack.wd_trip])
         with open(a.trace + "-iters.csv", "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["iter", "t_start_ns", "t_sent_ns", "t_polled_ns", "n_events"])
+            w.writerow(["iter", "t_start_ns", "t_sent_ns", "t_polled_ns", "n_events", "write_ns"])
             w.writerows(iters)
         print(f"trace: {a.trace}-acks.csv {a.trace}-iters.csv")
 

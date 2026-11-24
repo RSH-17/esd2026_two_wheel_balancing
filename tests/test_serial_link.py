@@ -19,12 +19,14 @@ from src.comm import serial_link as sl
 
 
 class FakeUno(threading.Thread):
-    def __init__(self, master_fd, send_ready=True, corrupt_ack_seqs=(), drop_ack_seqs=()):
+    def __init__(self, master_fd, send_ready=True, corrupt_ack_seqs=(), drop_ack_seqs=(),
+                 delay_ack_s=None):
         super().__init__(daemon=True)
         self.fd = master_fd
         self.send_ready = send_ready
         self.corrupt_ack_seqs = set(corrupt_ack_seqs)
         self.drop_ack_seqs = set(drop_ack_seqs)
+        self.delay_ack_s = dict(delay_ack_s or {})  # seq -> seconds to wait before acking
         self.crc_err = 0
         self.fmt_err = 0
         self.received = []  # (seq, u_l, u_r) of valid commands
@@ -48,6 +50,8 @@ class FakeUno(threading.Thread):
         parts = line[:star].decode().split(",")
         seq, u_l, u_r = int(parts[1]), int(parts[2]), int(parts[3])
         self.received.append((seq, u_l, u_r))
+        if seq in self.delay_ack_s:
+            time.sleep(self.delay_ack_s[seq])
         if seq not in self.drop_ack_seqs:
             os.write(self.fd, self._ack(seq))
 
@@ -138,6 +142,19 @@ class SerialLinkPtyTest(unittest.TestCase):
         self.assertEqual(link.stats.lost, 0)  # not yet expired
         self.drain(link, wait_s=0.1)
         self.assertEqual(link.stats.lost, 1)
+
+    def test_late_ack_counted_lost_not_as_long_rtt(self):
+        # Regression for the 2026-11-25 03:45 probe: an ack later than ack_timeout
+        # must be counted as lost while the caller keeps polling, never reported as an RTT.
+        fake, port = self.start(delay_ack_s={0: 0.15})
+        link = sl.SerialLink(port, ready_timeout_s=2.0, ack_timeout_s=0.05)
+        self.addCleanup(link.close)
+        link.send(0.0, 0.0)
+        events = self.drain(link, wait_s=0.3)
+        self.assertEqual(events, [])
+        self.assertEqual(link.stats.lost, 1)
+        self.assertEqual(link.stats.unknown_seq, 1)  # the late ack still arrived and was counted
+        self.assertEqual(link.pending, 0)
 
     def test_ready_timeout_raises(self):
         fake, port = self.start(send_ready=False)
