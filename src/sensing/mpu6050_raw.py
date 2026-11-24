@@ -73,17 +73,21 @@ def main() -> None:
             )
         wake_up(bus)
 
-        print("t,ax,ay,az,temp,gx,gy,gz,i2c_err")
         t0 = time.monotonic()
         try:
             while True:
                 t = time.monotonic() - t0
                 try:
                     s = read_raw(bus)
-                    print(f"{t:.3f},{s.ax},{s.ay},{s.az},{s.temp},{s.gx},{s.gy},{s.gz},{i2c_err}")
+                    print(
+                        f"t={t:7.3f}s | "
+                        f"ACC  ax={s.ax:6d} ay={s.ay:6d} az={s.az:6d} | "
+                        f"GYRO gx={s.gx:6d} gy={s.gy:6d} gz={s.gz:6d} | "
+                        f"temp={s.temp:6d} err={i2c_err}"
+                    )
                 except OSError:
                     i2c_err += 1
-                    print(f"{t:.3f},READ_ERROR,,,,,,,{i2c_err}")
+                    print(f"t={t:7.3f}s | READ_ERROR err={i2c_err}")
                 time.sleep(period_s)
         except KeyboardInterrupt:
             pass
