@@ -1,49 +1,46 @@
-# Handoff: MPU-6050 raw data 읽기 완료, GND 정정 및 미결 3 건 결정 — 다음은 물리단위 변환(θ, °/s)과 CSV 로깅
+# Handoff: §1-1 세션 시작 시각 미결을 SessionStart 훅으로 해결 — 다음은 imu_calib.py + CSV 로깅 (이전 세션에서 이어짐, 착수 안 함)
 
-**Last session close**: 2026-11-24 10:17 (종료 커밋은 이 파일과 함께 생성됨)
+**Last session close**: 2026-11-24 10:27 (종료 커밋은 이 파일과 함께 생성됨)
 **상태**: ready
 
 ## 세션 시작의 순서
 1. `git pull` → `git log --oneline 273cc08..HEAD` 로 지난 세션 이후 커밋을 **전부** 확인 (노트북 · Pi 양쪽 커밋 포함)
 2. 이 파일 정독 → 「다음 작업 시퀀스」를 계획으로 보고 → 학생 승인 후 착수
-3. 첫 턴에서 `date +"%Y-%m-%d %H:%M"` 을 읽어 세션 시작 시각을 남김
-   (**4 연속 세션**에서 이 단계가 누락됨 — §1-1 강화를 다음 세션엔 꼭 결정할 것)
+3. **[신규] 세션 시작 시각 실측·git pull 은 `.claude/settings.json` 의 SessionStart 훅이 자동 실행함**
+   (`AGENTS.md` §9 r3). 다음 세션에서 훅 결과가 컨텍스트에 안 보이면 `/hooks` 로 와처를 재적재하고,
+   그래도 안 되면 첫 턴에서 직접 `date` · `git pull` 을 실행할 것 — 이 확인 자체가 이번 세션의 미결임
 
-## 다음 작업 시퀀스 (단일)
+## 다음 작업 시퀀스 (단일, 2026-11-24 10:08 handoff 에서 이어짐 — 이번 세션엔 착수하지 않음)
 1. `src/sensing/imu_calib.py` 작성: `src/sensing/mpu6050_raw.py` 의 raw 값을 물리단위로 변환
    (가속도 ±2g → LSB/16384, 각속도 ±250°/s → LSB/131, 온도 raw/340+36.53), 자이로 bias 는 정지 상태
    n 샘플 평균으로 추정해 보정값 파일로 커밋, 장착 오프셋 θ₀ 측정 방법 포함
 2. CSV 파일 로깅 추가 — 제어 루프는 **200Hz 목표**로 구현하고 평균·최대 Δt 를 실측해 로그에 남김
    (로그 필드는 §8-B 최소 집합: `t, tick, theta_deg, gyro_dps, wheel_l, wheel_r, u_l, u_r, vbat, i2c_err`,
    아직 모터·엔코더가 없으니 해당 칸은 빈 값으로 두고 어떤 칸이 비었는지 로그에 명시) →
-   `python3 tools/check_log.py <로그> --rate <Hz>` 통과 확인. 터미널 디버그 출력(10Hz)은 그대로 둠
-3. 미결 2 건 (아래) 을 학생이 결정하고 필요하면 §9 에 기록
+   `python3 tools/check_log.py <로그> --rate <Hz>` 통과 확인
+3. 미결 2 건 (아래) 을 학생이 결정
 
 ## 핵심 진입점
-- `AGENTS.md` §5-5 (변환은 한 곳에) · §8-B (이륜 로봇 주제별 규칙) · §9 r2 (trailer · Pi 3 B+ 결정)
-- `docs/meeting-notes/2026-11-24-1006-decisions-and-correction.md` — 직전 회의록
+- `AGENTS.md` §1-1 (SessionStart 훅 강제) · §5-5 · §8-B · §9 r3 (세션 시작 훅 결정)
+- `.claude/settings.json` — SessionStart 훅 설정 (date + git pull)
+- `docs/meeting-notes/2026-11-24-1020-session-start-hook.md` — 직전 회의록
 - `src/sensing/mpu6050_raw.py` — raw 읽기 (WHO_AM_I 확인, ACC/GYRO 레이블 출력)
 - `tools/check_log.py` — 로그 무결성 검사 (§4-5)
 
 ## 확정 (재론 불요)
 - MPU-6050, bus=1, addr=0x68, WHO_AM_I 응답 확인됨 — raw 통신 정상
-- `i2cdetect -y 1` 이 0x68 을 못 찾은 원인은 **GND 연결 불량** — 학생 확인, 2026-11-24 10:10
-  (에이전트가 세션 중 「quick-write probe 비호환」으로 추정했던 것은 오진이었음 — §4-7 위반 사례로
-  `docs/meeting-notes/2026-11-24-0946-imu-raw-read.md` 의 [10:10] 항목에 남김)
-- 커밋 trailer(`Assisted-by`) **미사용** — 류시현 · 2026-11-24 10:15 (`AGENTS.md` §9 r2)
-- §8-B 「Pi 3 B+」 문장 **정정하지 않음** — 류시현 · 2026-11-24 10:15 (`AGENTS.md` §9 r2, 본문 그대로 유지)
-- CLI 디버그 출력(터미널, 10Hz)은 현재 상태 유지, **실제 제어 루프는 200Hz** — 류시현 · 2026-11-24 10:15
-  (`src/sensing/mpu6050_raw.py` 의 0.1s 터미널 출력 주기는 건드리지 않음. 다음에 CSV 로깅·제어 루프를
-  만들 때는 §8-B 「루프 주기 실측」 원칙대로 200Hz 를 **목표값**으로 코드에 반영하고, 평균·최대 Δt 를
-  실측해 로그에 남길 것 — Linux 에서 지터가 있을 수 있으므로 가정하지 않고 확인함)
+- `i2cdetect -y 1` 이 0x68 을 못 찾은 원인은 **GND 연결 불량** (학생 확인, 10-11-24 10:10)
+- 커밋 trailer(`Assisted-by`) **미사용** — 류시현 (`AGENTS.md` §9 r2)
+- §8-B 「Pi 3 B+」 문장 **정정하지 않음** — 류시현 (`AGENTS.md` §9 r2)
+- CLI 디버그 출력(10Hz)은 유지, **제어 루프는 200Hz 목표** — 류시현, Δt 실측 필수
+- **§1-1 세션 시작 시각 실측·git pull 은 SessionStart 훅으로 강제함** — 류시현 · 10:24 (`AGENTS.md` §9 r3,
+  지시만으로는 4 연속 재발했기 때문)
 
 ## 미결 (결정할 사람)
-- §1-1 세션 시작 시각 실측 단계 강화 여부 — 학생 (**4 연속 재발**, 다음 세션엔 결정 권고)
+- SessionStart 훅이 다음 세션에서 실제로 발화하는지 확인 — 다음 세션 첫 턴에서 확인 필요
+  (발화 안 하면 `/hooks` 로 재적재, 그래도 안 되면 학생이 재시작 여부 결정)
 - 아두이노 연결 여부·방식 — 학생. 에이전트 권고: `pyserial`
 
 ## 환경 유의
 - Pi 접속 정보는 `.env` 에만 둠, 커밋하지 않음
-- `sudo` 가 필요한 명령(패키지 설치 등)은 비대화형 Bash 에서 비밀번호 입력이 불가함 — 학생이 자신의 터미널에서
-  직접 실행함 (§3-4)
-- `.handoff.md.swp` 가 작업 디렉터리에 untracked 로 있었음 (에이전트가 만든 게 아님) — 다른 편집기로
-  이 파일을 열어둔 게 있다면 확인할 것
+- `sudo` 가 필요한 명령(패키지 설치 등)은 비대화형 Bash 에서 비밀번호 입력이 불가함 — 학생이 직접 실행 (§3-4)
