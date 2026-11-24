@@ -311,10 +311,14 @@ def main() -> int:
     p.add_argument("--inject-crc-at", type=float, default=None, help="seconds")
     p.add_argument("--pause-at", type=float, default=None, help="seconds")
     p.add_argument("--pause-ms", type=float, default=100.0)
+    p.add_argument("--switch-interval", type=float, default=None,
+                   help="sys.setswitchinterval() in seconds (Python default 0.005); applied value goes to meta")
     p.add_argument("--diag", action="store_true",
                    help="TEMP: per-tick CPU/write/outq columns, ROS/log/sampler event CSV")
     a = p.parse_args()
 
+    if a.switch_interval is not None:
+        sys.setswitchinterval(a.switch_interval)
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     started = time.strftime("%Y-%m-%d %H:%M:%S %Z")
     status: dict = {}
@@ -401,6 +405,7 @@ def main() -> int:
             "imu": a.imu, "imu_who_am_i": imu_who, "i2c_clock_hz": i2c_clock_hz(1),
             "ros": a.ros, "ros_info": ros.rclpy_info if ros else None,
             "python": platform.python_version(), "kernel": platform.release(),
+            "switch_interval_s": sys.getswitchinterval(),
             "cpu_governor": read_text("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"),
             "cpu_temp_c_end": (int(read_text("/sys/class/thermal/thermal_zone0/temp") or 0) / 1e3),
             "vbat": None,  # not measured in stage 1 (no motor battery connected)
