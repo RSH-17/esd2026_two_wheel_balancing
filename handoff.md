@@ -1,43 +1,43 @@
-# Handoff: lgpio·smbus2 설치 완료 — 다음은 I2C 통신 확인과 IMU 로그
+# Handoff: MPU-6050 raw data 읽기 완료 — 다음은 물리단위 변환(θ, °/s)과 CSV 로깅
 
-**Last session close**: 2026-11-24 09:41 (종료 커밋은 이 파일과 함께 생성됨)
+**Last session close**: 2026-11-24 10:06 (종료 커밋은 이 파일과 함께 생성됨)
 **상태**: ready
 
 ## 세션 시작의 순서
-1. `git pull` → `git log --oneline 221777f..HEAD` 로 지난 세션 이후 커밋을 **전부** 확인 (노트북 · Pi 양쪽 커밋 포함)
+1. `git pull` → `git log --oneline 9364694..HEAD` 로 지난 세션 이후 커밋을 **전부** 확인 (노트북 · Pi 양쪽 커밋 포함)
 2. 이 파일 정독 → 「다음 작업 시퀀스」를 계획으로 보고 → 학생 승인 후 착수
 3. 첫 턴에서 `date +"%Y-%m-%d %H:%M"` 을 읽어 세션 시작 시각을 남김
-   (2 연속 세션에서 이 단계가 누락되어 P1 들의 입력 시각이 영구 미기록으로 남았음)
+   (**3 연속 세션**에서 이 단계가 누락됨 — §1-1 강화 여부를 이번엔 꼭 결정할 것)
 
 ## 다음 작업 시퀀스 (단일)
-1. `i2cdetect -y 1` 로 MPU-6050 버스 스캔 (`0x68`/`0x69` 응답 확인) → `WHO_AM_I` (레지스터 0x75) 읽기로 실제
-   통신을 확인함. 이 단계에서 모터는 돌리지 않음
-2. 통신이 확인되면 MPU-6050 을 `smbus2` 로 읽어 `logs/` 에 CSV 로 저장하고
-   `python3 tools/check_log.py <로그> --rate <Hz>` 를 통과시킴. 로그 필드는 §8-B 최소 집합
-   (`t, tick, theta_deg, gyro_dps, wheel_l, wheel_r, u_l, u_r, vbat, i2c_err`) 을 따르고, 보정 코드는
-   `src/sensing/imu_calib.py` 한 곳에 둠
-3. 미결 4 건 (커밋 trailer 사용 여부, §8-B 「Pi 3 B+」 문장, §1-1 시작 시각 실측 규칙, 아두이노 연결 방식) 을
-   결정받아 반영하고 §9 에 기록함
+1. `src/sensing/imu_calib.py` 작성: `src/sensing/mpu6050_raw.py` 의 raw 값을 물리단위로 변환
+   (가속도 ±2g → LSB/16384, 각속도 ±250°/s → LSB/131, 온도 raw/340+36.53), 자이로 bias 는 정지 상태
+   n 샘플 평균으로 추정해 보정값 파일로 커밋, 장착 오프셋 θ₀ 측정 방법 포함
+2. CSV 파일 로깅 추가 (로그 필드는 §8-B 최소 집합: `t, tick, theta_deg, gyro_dps, wheel_l, wheel_r, u_l, u_r, vbat, i2c_err`,
+   아직 모터·엔코더가 없으니 해당 칸은 빈 값으로 두고 어떤 칸이 비었는지 로그에 명시) →
+   `python3 tools/check_log.py <로그> --rate <Hz>` 통과 확인
+3. 미결 4 건 + 이번 세션에서 생긴 가정 2 건 (아래) 을 학생이 결정하고 §9 에 기록
 
 ## 핵심 진입점
-- `AGENTS.md` §3-4 (sudo 최소화) · §8-B (이륜 로봇 주제별 규칙)
-- `docs/meeting-notes/2026-11-24-0941-lgpio-smbus2-setup.md` — 직전 회의록
-- `hw/limits.py` — 액추에이터 한계값 (모터 코드 작성 시 참조)
+- `AGENTS.md` §5-5 (변환은 한 곳에) · §8-B (이륜 로봇 주제별 규칙)
+- `docs/meeting-notes/2026-11-24-0946-imu-raw-read.md` — 직전 회의록
+- `src/sensing/mpu6050_raw.py` — raw 읽기 (WHO_AM_I 확인, ACC/GYRO 레이블 출력)
 - `tools/check_log.py` — 로그 무결성 검사 (§4-5)
 
 ## 확정 (재론 불요)
-- GPIO 라이브러리 `lgpio`, I2C 라이브러리 `smbus2` 채택 — 류시현 · 2026-11-24
-- `python3-lgpio` · `python3-smbus2` · `i2c-tools` 설치 완료 (Pi, Ubuntu 24.04.5, aarch64) — `dpkg -l` 로 확인
-- 사용자 `ryu` 는 이미 `gpio` `i2c` `spi` 그룹에 속해 있어 추가 그룹 설정 불필요 — `groups` 로 확인
-- 아두이노 연결은 지금 다루지 않음 (방식은 미결, 아래)
+- MPU-6050, bus=1, addr=0x68, WHO_AM_I 응답 확인됨 — raw 통신 정상
+- `i2cdetect -y 1` 은 0x68 을 못 찾음 (quick-write probe 비호환으로 추정, **미검증**) — `WHO_AM_I` 직접 읽기로 통신 확인했으니 이 결과 자체는 무시해도 됨
 
 ## 미결 (결정할 사람)
-- 커밋 trailer 사용 여부 — 학생 (이전 세션부터 이어짐)
-- §8-B 「Pi 3 B+」 문장 정정 — 학생 (이전 세션부터 이어짐)
-- §1-1 세션 시작 시각 실측 단계 추가 여부 — 학생 (2 연속 세션 재발)
-- 아두이노 연결 여부·방식 — 학생. 에이전트 권고: `pyserial` (단순, 200 Hz 루프 오버헤드가 적음). micro-ROS 는 대안
+- 커밋 trailer 사용 여부 — 학생 (3 세션째 이어짐)
+- §8-B 「Pi 3 B+」 문장 정정 — 학생 (3 세션째 이어짐)
+- §1-1 세션 시작 시각 실측 단계 강화 여부 — 학생 (**3 연속 재발**, 이번엔 결정 권고)
+- 아두이노 연결 여부·방식 — 학생. 에이전트 권고: `pyserial`
+- CLI 출력/로깅 주기 0.1 s(10Hz) 가 적절한지 — 학생 (이번 세션에 에이전트가 임의로 정함)
+- i2cdetect 미응답 원인을 제거 실험으로 확인할지 — 학생 (지금은 추정만 하고 안 건드려도 동작엔 문제 없음)
 
 ## 환경 유의
 - Pi 접속 정보는 `.env` 에만 둠, 커밋하지 않음
 - `sudo` 가 필요한 명령(패키지 설치 등)은 비대화형 Bash 에서 비밀번호 입력이 불가함 — 학생이 자신의 터미널에서
   직접 실행함 (§3-4)
+- 로컬이 origin 보다 2 커밋 앞섬 (`af7f54e`, `cd9b8e0`) — 세션 종료 커밋과 함께 push 할 것
