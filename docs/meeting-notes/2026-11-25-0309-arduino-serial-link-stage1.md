@@ -1,6 +1,6 @@
 # 회의록: Pi 시간대 정정 · Pi↔Uno 시리얼 링크 1 단계 구현 · 루프 주기 측정과 지연 원인 추적 (보류)
 
-**Date**: 2026-11-25 · **세션**: [03:09]–[04:30] · **Status**: Draft
+**Date**: 2026-11-25 · **세션**: [03:09]–[04:33] · **Status**: Draft
 **작성**: 에이전트 (Claude Code · Opus 5.5, 세션 종료 시 작성) · **검토**: 류시현 [HH:MM — 학생이 채움]
 **직전 회의록**: `docs/meeting-notes/2026-11-25-0239-arduino-serial-architecture.md`
 
