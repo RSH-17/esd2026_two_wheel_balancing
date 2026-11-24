@@ -124,6 +124,8 @@ class LinkStats:
 class AckEvent:
     ack: Ack
     rtt_s: float
+    t_send_ns: int  # time.monotonic_ns() when the command was written
+    t_seen_ns: int  # time.monotonic_ns() at the start of the poll() that read the ack
 
 
 class SerialLink:
@@ -200,7 +202,7 @@ class SerialLink:
                 self.stats.unknown_seq += 1
                 continue
             self.stats.ack += 1
-            events.append(AckEvent(ack, (now - t_send) / 1e9))
+            events.append(AckEvent(ack, (now - t_send) / 1e9, t_send, now))
         for seq, t_send in list(self._pending.items()):
             if now - t_send > self.ack_timeout_ns:
                 del self._pending[seq]
@@ -213,34 +215,84 @@ class SerialLink:
 
 def _main() -> None:
     import argparse
+    import csv
+    import os
     import statistics
 
     p = argparse.ArgumentParser(description="Send zero commands to the Uno and report RTT.")
     p.add_argument("--port", default=None)
     p.add_argument("--count", type=int, default=200)
     p.add_argument("--rate", type=float, default=200.0)
+    # TEMP instrumentation (AGENTS.md 5-3): remove --mode/--trace in a separate commit
+    # once the 205 ms RTT outlier of 2026-11-25 03:45 is explained.
+    p.add_argument("--mode", choices=["tick", "tight"], default="tick",
+                   help="tick: one poll per period; tight: busy-poll until the ack arrives")
+    p.add_argument("--trace", default=None, help="prefix for per-ack and per-iteration CSVs")
     a = p.parse_args()
 
     link = SerialLink(a.port)
-    print(f"port={link.port} baud={link.baud} ready={link.stats.ready}")
-    period = 1.0 / a.rate
-    rtts = []
-    t_next = time.monotonic()
-    for _ in range(a.count):
-        link.send(0.0, 0.0)
-        rtts += [e.rtt_s for e in link.poll()]
-        t_next += period
-        time.sleep(max(0.0, t_next - time.monotonic()))
+    print(f"port={link.port} baud={link.baud} mode={a.mode} rate={a.rate} ready={link.stats.ready}")
+    period_ns = int(1e9 / a.rate)
+    events: list[tuple[int, str, AckEvent]] = []   # (iter, phase, event)
+    iters: list[tuple[int, int, int, int, int]] = []  # iter, t_start, t_sent, t_polled, n_ev
+    t_next = time.monotonic_ns()
+    for i in range(a.count):
+        t0 = time.monotonic_ns()
+        seq = link.send(0.0, 0.0)
+        t1 = time.monotonic_ns()
+        got = link.poll()
+        if a.mode == "tight":
+            deadline = t1 + link.ack_timeout_ns
+            while not any(e.ack.seq == seq for e in got) and time.monotonic_ns() < deadline:
+                got += link.poll()
+        t2 = time.monotonic_ns()
+        events += [(i, "loop", e) for e in got]
+        iters.append((i, t0, t1, t2, len(got)))
+        t_next += period_ns
+        time.sleep(max(0, t_next - time.monotonic_ns()) / 1e9)
     time.sleep(ACK_TIMEOUT_S * 2)
-    rtts += [e.rtt_s for e in link.poll()]
+    events += [(a.count, "drain", e) for e in link.poll()]
     link.close()
 
     s = link.stats
     print(f"tx={s.tx} ack={s.ack} lost={s.lost} bad_ack={s.bad_ack} "
           f"unknown_seq={s.unknown_seq} other_line={s.other_line} remote={s.remote}")
-    if rtts:
-        ms = [x * 1e3 for x in rtts]
-        print(f"rtt_ms mean={statistics.mean(ms):.3f} max={max(ms):.3f} min={min(ms):.3f} n={len(ms)}")
+
+    def summary(label, rows):
+        if rows:
+            ms = [e.rtt_s * 1e3 for _, _, e in rows]
+            print(f"rtt_ms[{label}] mean={statistics.mean(ms):.3f} sd={statistics.pstdev(ms):.3f} "
+                  f"max={max(ms):.3f} min={min(ms):.3f} n={len(ms)}")
+        else:
+            print(f"rtt_ms[{label}] n=0")
+
+    summary("all", events)
+    summary("loop", [r for r in events if r[1] == "loop"])
+    summary("drain", [r for r in events if r[1] == "drain"])
+    worst = max(events, key=lambda r: r[2].rtt_s, default=None)
+    if worst:
+        print(f"worst: seq={worst[2].ack.seq} phase={worst[1]} iter={worst[0]} "
+              f"rtt_ms={worst[2].rtt_s * 1e3:.3f}")
+    dts = [(b[1] - a_[1]) / 1e6 for a_, b in zip(iters, iters[1:])]
+    if dts:
+        print(f"loop_dt_ms mean={statistics.mean(dts):.3f} max={max(dts):.3f} min={min(dts):.3f}")
+        wr = [(it[2] - it[1]) / 1e6 for it in iters]
+        print(f"write_ms mean={statistics.mean(wr):.3f} max={max(wr):.3f}")
+
+    if a.trace:
+        os.makedirs(os.path.dirname(a.trace) or ".", exist_ok=True)
+        with open(a.trace + "-acks.csv", "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["seq", "phase", "iter", "t_send_ns", "t_seen_ns", "rtt_ms",
+                        "crc_err", "fmt_err", "wd_trip"])
+            for i, ph, e in events:
+                w.writerow([e.ack.seq, ph, i, e.t_send_ns, e.t_seen_ns, f"{e.rtt_s * 1e3:.4f}",
+                            e.ack.crc_err, e.ack.fmt_err, e.ack.wd_trip])
+        with open(a.trace + "-iters.csv", "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["iter", "t_start_ns", "t_sent_ns", "t_polled_ns", "n_events"])
+            w.writerows(iters)
+        print(f"trace: {a.trace}-acks.csv {a.trace}-iters.csv")
 
 
 if __name__ == "__main__":
