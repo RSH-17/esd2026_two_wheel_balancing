@@ -12,3 +12,4 @@
 |---|---|---|---|---|
 | YYYY-MM-DD | <예: Kiro · Auto> | <예: `tools/plot.py` 작성함> | <예: 출력 그림을 로그와 대조함> | `docs/meeting-notes/<파일>` |
 | 2026-11-24 | Claude Code · Opus 5 | `AGENTS.md` 전문을 읽고 절별로 설명함, §9 개정 이력 r0 · r1 행을 `git log` 실측 날짜로 채움 (`d1f4601`), 세션 기록 3 건 작성함 | `<학생이 채움 — §6-3>` | `docs/meeting-notes/2026-11-24-1151-rules-revision-history.md` |
+| 2026-11-24 | Claude Code · Sonnet 5 | GPIO/I2C 라이브러리(`lgpio`, `smbus2`) 선정 근거와 장단점을 정리함, 설치 전 호스트 상태(`uname` · `groups` · `apt-cache policy`)를 점검함, 패키지명 오류(`python-smbus3` → `python3-smbus2`)를 정정함, 설치 완료를 `dpkg -l` 로 확인함, I2C 통신 확인 절차(`i2cdetect` · `WHO_AM_I`)를 제시함 | `<학생이 채움 — §6-3>` | `docs/meeting-notes/2026-11-24-0941-lgpio-smbus2-setup.md` |
