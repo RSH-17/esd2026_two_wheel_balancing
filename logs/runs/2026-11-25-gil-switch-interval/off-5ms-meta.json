@@ -1,0 +1,94 @@
+{
+  "started": "2026-11-25 04:21:51 KST",
+  "args": {
+    "out": "logs/runs/2026-11-25-gil-switch-interval/off-5ms",
+    "duration": 60.0,
+    "rate": 200.0,
+    "ros": "off",
+    "imu": "off",
+    "port": null,
+    "inject_crc_at": null,
+    "pause_at": null,
+    "pause_ms": 100.0,
+    "switch_interval": null,
+    "diag": true
+  },
+  "argv": [
+    "/home/ryu/esd2026_two_wheel_balancing/src/control/loop_bench.py",
+    "--duration",
+    "60",
+    "--imu",
+    "off",
+    "--diag",
+    "--ros",
+    "off",
+    "--out",
+    "logs/runs/2026-11-25-gil-switch-interval/off-5ms"
+  ],
+  "applied": {
+    "rate_hz": 200.0,
+    "baud": 115200,
+    "port": "/dev/serial/by-id/usb-Arduino__www.arduino.cc__0043_8513831303435140A231-if00",
+    "ready": {
+      "fw": "serial_link-0.1",
+      "motor": "0",
+      "wd_ms": "50"
+    },
+    "ack_timeout_s": 0.1,
+    "motor_max_duty": 0.6,
+    "imu": "off",
+    "imu_who_am_i": null,
+    "i2c_clock_hz": 100000,
+    "ros": "off",
+    "ros_info": null,
+    "python": "3.12.3",
+    "kernel": "6.8.0-1068-raspi",
+    "switch_interval_s": 0.005,
+    "cpu_governor": "ondemand",
+    "cpu_temp_c_end": 49.173,
+    "vbat": null,
+    "theta_deg": "not computed: src/sensing/imu_calib.py does not exist yet"
+  },
+  "summary": {
+    "ticks": 12000,
+    "rows_written": 12000,
+    "overruns": 2,
+    "dt_ms": {
+      "mean": 5.000006072089341,
+      "sd": 0.09455110699531175,
+      "p99": 5.089559,
+      "max": 7.724524,
+      "min": 2.264455
+    },
+    "work_us": {
+      "mean": 619.1531733333334,
+      "p99": 1958.539,
+      "max": 7601.269
+    },
+    "link": {
+      "tx": 12000,
+      "ack": 12000,
+      "lost": 0,
+      "bad_ack": 0,
+      "unknown_seq": 0,
+      "other_line": 0,
+      "clipped": 0,
+      "remote": {
+        "seq": 11999,
+        "crc_err": 0,
+        "fmt_err": 0,
+        "wd_trip": 0
+      }
+    },
+    "ack_lag_ticks": {
+      "0": 1,
+      "1": 5371,
+      "2": 6627
+    },
+    "i2c_err": 0,
+    "injected_crc": 0,
+    "pauses": 0,
+    "ros_published": null,
+    "diag": true
+  }
+}
