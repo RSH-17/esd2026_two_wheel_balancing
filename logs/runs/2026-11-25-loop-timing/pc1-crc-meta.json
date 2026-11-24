@@ -1,0 +1,90 @@
+{
+  "started": "2026-11-25 04:05:59 KST",
+  "args": {
+    "out": "logs/runs/2026-11-25-loop-timing/pc1-crc",
+    "duration": 60.0,
+    "rate": 200.0,
+    "ros": "off",
+    "imu": "off",
+    "port": null,
+    "inject_crc_at": 30.0,
+    "pause_at": null,
+    "pause_ms": 100.0
+  },
+  "argv": [
+    "/home/ryu/esd2026_two_wheel_balancing/src/control/loop_bench.py",
+    "--duration",
+    "60",
+    "--ros",
+    "off",
+    "--imu",
+    "off",
+    "--inject-crc-at",
+    "30",
+    "--out",
+    "logs/runs/2026-11-25-loop-timing/pc1-crc"
+  ],
+  "applied": {
+    "rate_hz": 200.0,
+    "baud": 115200,
+    "port": "/dev/serial/by-id/usb-Arduino__www.arduino.cc__0043_8513831303435140A231-if00",
+    "ready": {
+      "fw": "serial_link-0.1",
+      "motor": "0",
+      "wd_ms": "50"
+    },
+    "ack_timeout_s": 0.1,
+    "motor_max_duty": 0.6,
+    "imu": "off",
+    "imu_who_am_i": null,
+    "i2c_clock_hz": 100000,
+    "ros": "off",
+    "ros_info": null,
+    "python": "3.12.3",
+    "kernel": "6.8.0-1068-raspi",
+    "cpu_governor": "ondemand",
+    "cpu_temp_c_end": 45.764,
+    "vbat": null,
+    "theta_deg": "not computed: src/sensing/imu_calib.py does not exist yet"
+  },
+  "summary": {
+    "ticks": 12000,
+    "rows_written": 12000,
+    "overruns": 1,
+    "dt_ms": {
+      "mean": 5.00000780231686,
+      "sd": 0.04487717393438955,
+      "p99": 5.076737,
+      "max": 7.387029,
+      "min": 3.575266
+    },
+    "work_us": {
+      "mean": 525.926666,
+      "p99": 1272.86,
+      "max": 3809.876
+    },
+    "link": {
+      "tx": 12000,
+      "ack": 11999,
+      "lost": 1,
+      "bad_ack": 0,
+      "unknown_seq": 0,
+      "other_line": 0,
+      "clipped": 0,
+      "remote": {
+        "seq": 11999,
+        "crc_err": 1,
+        "fmt_err": 0,
+        "wd_trip": 0
+      }
+    },
+    "ack_lag_ticks": {
+      "1": 5333,
+      "2": 6664
+    },
+    "i2c_err": 0,
+    "injected_crc": 1,
+    "pauses": 0,
+    "ros_published": null
+  }
+}
