@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "TS=$(date +\"%Y-%m-%d %H:%M\"); PULL=$(git pull 2>&1); jq -n --arg ts \"$TS\" --arg pull \"$PULL\" '{systemMessage: (\"Session start: \" + $ts + \"\\n\" + $pull), hookSpecificOutput: {hookEventName: \"SessionStart\", additionalContext: (\"session_start_time: \" + $ts + \"\\n\\ngit pull:\\n\" + $pull)}}'",
+            "timeout": 30,
+            "statusMessage": "세션 시작 시각 실측 및 git pull 실행 중..."
+          }
+        ]
+      }
+    ]
+  }
+}
