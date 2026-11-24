@@ -236,10 +236,11 @@ def _main() -> None:
     p.add_argument("--port", default=None)
     p.add_argument("--count", type=int, default=200)
     p.add_argument("--rate", type=float, default=200.0)
-    # TEMP instrumentation (AGENTS.md 5-3): remove --mode/--trace in a separate commit
-    # once the 205 ms RTT outlier of 2026-11-25 03:45 is explained.
-    p.add_argument("--mode", choices=["tick", "tight"], default="tick",
-                   help="tick: one poll per period; tight: busy-poll until the ack arrives")
+    p.add_argument("--mode", choices=["tick", "rtt"], default="tick",
+                   help="tick: one poll per period (what a control loop sees); "
+                        "rtt: busy-poll until the ack arrives (measures the link RTT itself)")
+    # TEMP instrumentation (AGENTS.md 5-3): remove --trace in a separate commit once
+    # src/control/loop_bench.py records per-seq timing (cause of the 03:45 outlier is fixed in d13c752).
     p.add_argument("--trace", default=None, help="prefix for per-ack and per-iteration CSVs")
     a = p.parse_args()
 
@@ -254,7 +255,7 @@ def _main() -> None:
         seq = link.send(0.0, 0.0)
         t1 = time.monotonic_ns()
         got = link.poll()
-        if a.mode == "tight":
+        if a.mode == "rtt":
             deadline = t1 + link.ack_timeout_ns
             while not any(e.ack.seq == seq for e in got) and time.monotonic_ns() < deadline:
                 got += link.poll()
