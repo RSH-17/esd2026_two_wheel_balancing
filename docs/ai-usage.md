@@ -11,3 +11,4 @@
 | 날짜 | 도구 · 모델 | 한 일 | 학생이 검토한 범위 | 회의록 |
 |---|---|---|---|---|
 | YYYY-MM-DD | <예: Kiro · Auto> | <예: `tools/plot.py` 작성함> | <예: 출력 그림을 로그와 대조함> | `docs/meeting-notes/<파일>` |
+| 2026-11-24 | Claude Code · Opus 5 | `AGENTS.md` 전문을 읽고 절별로 설명함, §9 개정 이력 r0 · r1 행을 `git log` 실측 날짜로 채움 (`d1f4601`), 세션 기록 3 건 작성함 | `<학생이 채움 — §6-3>` | `docs/meeting-notes/2026-11-24-1151-rules-revision-history.md` |
