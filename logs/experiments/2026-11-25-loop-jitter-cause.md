@@ -31,12 +31,33 @@
 
 | 런 | 조건 | 시각 | 로그 | 실제 적용값 (meta 에서 읽음) | `check_log.py` |
 |---|---|---|---|---|---|
+| diag-off | ros off · `--diag` | 04:15 | `logs/runs/2026-11-25-loop-jitter-cause/diag-off` | fw `serial_link-0.1` · motor 0 · wd 50 ms · imu off · governor ondemand · diag true | VOID (gap 7.6 ms) |
+| diag-on | ros on · `--diag` | 04:16 | `…/diag-on` | 위와 같음 + `rmw_fastrtps_cpp` | VOID (gap 9.7 ms) |
+
+- switch interval 은 이 실험 당시 meta 에 기록하지 않았음 (필드 추가 전)
 
 ## 3. 결과
 
-**판정**:
+`python3 tools/analyze_jitter.py diag-off diag-on` 출력 (n = 1 씩):
+
+| 지표 | diag-off | diag-on |
+|---|---|---|
+| Δt mean ± sd · p99 · max [ms] | 5.000 ± 0.068 · 5.082 · 7.617 | 5.000 ± 0.124 · 5.092 · 9.748 |
+| 정지 tick (write > 2 ms) | 52 | 79 |
+| 지연 tick (Δt > 7.5 ms) | 1 | 4 |
+| 정지 tick 의 write CPU 비율 중앙값 | 0.098 | 0.113 |
+| outq_before > 0 인 tick | 0 | 0 |
+| ROS 콜백 겹침률 (우연 기대치, 배수) | — | 0.570 (0.152, 3.74 배) |
+| 로그 flush 겹침률 | 0 / 52 | 0 / 79 |
+| cpu0 클록 변화 · 변화 ±50 ms 가 덮는 tick 비율 | 306 회 · 0.510 | 410 회 · 0.683 |
+| 링크 (ack / lost / Uno 카운터) | 12000 / 0 / 0 | 12000 / 0 / 0 |
+
+**판정**: 등재 규칙상 **(가) ROS 경합 지지** (겹침률 3.74 배 ≥ 3, CPU 비율 0.113 < 0.5). (다) 지지 안 됨, (나) 이 계측으로 판별 불가. 탐색 결과라 결론에 인용하지 않음
 **비고**:
+- ROS 가 없는 diag-off 에도 정지 tick 이 52 개 있었고, 어느 기록된 스레드 구간과도 겹치지 않음 → ROS 는 정지를 늘리는 요인일 수 있으나 유일한 원인으로 설명되지 않음
+- 양쪽 모두 정지 중 CPU 비율이 약 0.1 이고 OS 출력 큐는 비어 있었음 → 제어 스레드가 write() 안에서 「기다림」. 이를 근거로 GIL 전환 간격 가설을 세워 다음 실험으로 검사함
+- diag-off 도 VOID 가 되어 선행 scout-off (PASS) 와 다름. `--diag` 부하 탓인지 런 간 변동인지 구분하지 못함
 
 ## 4. 다음
 
--
+- `2026-11-25-gil-switch-interval.md` 로 이어짐 (GIL 가설 제거 실험)

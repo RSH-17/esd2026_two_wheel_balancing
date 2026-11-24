@@ -34,15 +34,37 @@
 
 | 런 | 조건 | 시각 | 로그 | 실제 적용값 (meta 에서 읽음) | `check_log.py` |
 |---|---|---|---|---|---|
+| pc1 | 양성 대조 · crc 주입 30 s | 04:05 | `logs/runs/2026-11-25-loop-timing/pc1-crc` | fw `serial_link-0.1` · motor 0 · wd 50 ms · ros off · imu off · governor ondemand | PASS |
+| pc2 | 양성 대조 · 30 s 에 100 ms 정지 | 04:07 | `…/pc2-pause` | 위와 같음 | VOID (gap 105.1 ms, 기대대로) |
+| pc3 | 양성 대조 · pc1 복사본 1 행 삭제 | 04:08 | `…/pc3-rowdel.csv` | — | VOID (tick 불연속, 기대대로) |
+| scout-off | ros off | 04:08 | `…/scout-off` | 위와 같음 | PASS |
+| scout-on | ros on | 04:09 | `…/scout-on` | 위와 같음 + `rmw_fastrtps_cpp` | VOID (gap 9.6 ms) |
+
+- switch interval 은 이 실험 당시 meta 에 기록하지 않았음 (필드 추가 전). Python 기본값 0.005 s 로 돌았을 것으로 보지만 기록으로 확인되지 않음
 
 ## 3. 결과
 
-| 조건 | n | 지표 (mean ± sd) | baseline 대비 |
-|---|---|---|---|
+양성 대조 3 개는 모두 기대대로 나옴 (pc1: Uno `crc_err` 1 · Pi `lost` 1 / pc2: Uno `wd_trip` 1 / pc3: VOID). 펌웨어 watchdog 의 실제 동작을 pc2 에서 처음 확인함.
 
-**판정**:
+| 지표 (scout, n = 1) | scout-off | scout-on |
+|---|---|---|
+| Δt mean ± sd [ms] | 5.000 ± 0.044 | 5.000 ± 0.121 |
+| Δt p99 / max [ms] | 5.082 / 7.131 | 5.109 / 9.598 |
+| overrun | 0 | 14 |
+| work_us mean / p99 / max | 516 / 1747 / 3674 | 543 / 1848 / 5957 |
+| tx / ack / lost / bad_ack / unknown_seq | 12000 / 12000 / 0 / 0 / 0 | 12000 / 12000 / 0 / 0 / 0 |
+| Uno crc / fmt / wd_trip | 0 / 0 / 0 | 0 / 0 / 0 |
+| ack_lag {tick: 건수} | {1: 5347, 2: 6651} | {0: 5, 1: 5379, 2: 6613, 3: 1} |
+| 기준 1 · 2 · 3 | 통과 · 통과 · 통과 | **실패** · 통과 · **실패** |
+
+**판정**: scout-on 이 기준 1 (max gap 9.6 ms) · 기준 3 (seq 4037 이 3 tick) 을 넘지 못해 중단 기준에 따라 확증 (n = 3) 을 돌리지 않음. Q2 는 「판정 보류」 임. scout 결과라 결론에 인용하지 않음
 **비고**:
+- scout-on 의 Δt > 7.5 ms 4 건은 t ≈ 20.15–20.23 s 의 약 80 ms 에 몰려 있었고, 그 구간에서 `write()` 가 2.2–3.3 ms 씩 반복해 걸림. 긴 Δt 뒤에 짧은 Δt 가 와 평균 주기는 유지됨
+- ack_lag 0 인 5 건은 모두 work_us 4–5.7 ms 인 tick 으로, tick 안에서 RTT 만큼 시간이 지난 것임
+- scout-off 도 max 7.131 ms 로 기준까지 여유가 0.37 ms 뿐이었음
+- 7.5 ms 기준은 로그 무결 규칙 (1.5 × 주기) 에서 온 값이고, 제어 성능에 대한 요구로 정한 값이 아님
 
 ## 4. 다음
 
--
+- 원인 분리 실험 `2026-11-25-loop-jitter-cause.md` 와 `2026-11-25-gil-switch-interval.md` 로 이어짐
+- 원인 추적은 류시현 결정 (04:29) 으로 **보류**함. IMU 연결 후 `--imu on` 으로 다시 측정하고, 실제 제어에서 주기 초과가 문제가 되는지 확인한 뒤 재개 여부를 정함
